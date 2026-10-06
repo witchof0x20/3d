@@ -6,8 +6,9 @@
 //
 // The PSUs slide in from the rear, IEC end first, and bottom out against
 // lips around the front cutouts. A bolt-on rear clamp plate (M3 screws into
-// heat-set inserts in the wall posts) pins them forward. At 2U and above the
-// cutouts also get top lips, so the PSU is captured in every direction.
+// heat-set inserts in the wall posts) pins them forward. The front lips go
+// all the way round the cutout (the top bar sits in front of the PSU face, so
+// it fits even in 1U).
 //
 // With psu_screws on, the PSUs are also bolted through the front panel (4x)
 // and the rear plate (2x) using the 6-32 holes from Intel's Flex ATX
@@ -43,8 +44,9 @@ front_holes = [[4.4, 4.6], [15.2, 3.5], [76.0, 4.1], [76.0, 36.1]];
 rear_holes = [[15.0, 33.5], [66.5, 33.5]];
 psu_screw_d = 3.8;          // #6-32 clearance
 screw_pad_r = 4.5;
-// Front pocket around the IEC inlet so a C13 plug body can seat: [u0, u1, v0, v1].
-iec_relief = [0, 31, 0, 45];
+// Front pockets so a C13 plug body can seat and the two screws beside the
+// inlet sit flush. Each is [u0, u1, v0, v1].
+iec_relief = [[3, 30, 0, 45], [0, 20, 0, 9]];
 iec_relief_t = 2;           // panel left behind the pocket
 
 /* [Structure] */
@@ -53,7 +55,7 @@ outer_wall_t = 6;
 center_wall_t = 8;
 lip_side = 3;               // how far the front lips cover the PSU face
 lip_bottom = 2;
-lip_top = 3;                // only used when there is room above the PSU
+lip_top = 3;
 rear_lip_side = 4;
 rear_lip_bottom = 6;
 gusset_x = 14;
@@ -84,13 +86,13 @@ post_x = body_w / 2 - outer_wall_t + post_w / 2;
 post_z = [floor_t + 7, wall_h - 7];
 psu_top = floor_t + psu_h;
 // Only close the cutout over the PSU if the bar above it is worth having.
-closed_top = panel_h - psu_top >= 4;
 
 rail_inner = rail_hole_pitch / 2 - 8;
 assert(body_w / 2 + gusset_x <= rail_inner, "body/gussets would hit the rack rails");
 assert(body_w / 2 - outer_wall_t + post_w <= rail_inner, "rear posts would hit the rack rails");
 assert(panel_w > rail_hole_pitch + rack_hole_d + rack_hole_slot + 4, "ears too narrow for the rail holes");
 assert(psu_top <= units * U - u_clear / 2, "PSU sticks out of the rack unit; reduce floor_t");
+assert(panel_h - psu_top + lip_top >= 2.5, "front top bar too thin");
 
 // Extrude a 2D shape drawn in (x, z) so it occupies y in [-t, 0].
 module xz_extrude(t) {
@@ -109,14 +111,14 @@ module psu_face(cx) {
 
 // Solid tab around a PSU screw hole, run out to the nearest edge that has
 // panel material to hang it from.
-module screw_pad(h, top_closed) {
+module screw_pad(h) {
     u = h[0];
     v = h[1];
     hull() {
         translate([u, v]) circle(r = screw_pad_r);
         if (v <= 10)
             translate([u - screw_pad_r, -1]) square([2 * screw_pad_r, 1]);
-        else if (top_closed && v >= psu_h - 10)
+        else if (v >= psu_h - 10)
             translate([u - screw_pad_r, psu_h]) square([2 * screw_pad_r, 1]);
         else
             translate([u < psu_w / 2 ? -1 : psu_w, v - screw_pad_r]) square([1, 2 * screw_pad_r]);
@@ -125,15 +127,22 @@ module screw_pad(h, top_closed) {
 
 // Opening in a plate in front of / behind a bay, leaving lips around the PSU
 // face plus pads for any PSU screws.
-module bay_cutout(cx, side, bottom, top, holes, top_closed) {
+module bay_cutout(cx, side, bottom, top, holes) {
     psu_face(cx) difference() {
         rounded_rect(side, bottom, psu_w - side, top, corner_r);
-        if (psu_screws) for (h = holes) screw_pad(h, top_closed);
+        if (psu_screws) {
+            for (h = holes) screw_pad(h);
+            // merge neighbouring pads on the same edge so there is no notch between them
+            for (i = [0 : len(holes) - 2], j = [i + 1 : len(holes) - 1])
+                if (abs(holes[i][0] - holes[j][0]) < 4 * screw_pad_r
+                    && abs(holes[i][1] - holes[j][1]) < screw_pad_r)
+                    hull() { screw_pad(holes[i]); screw_pad(holes[j]); }
+        }
     }
     if (psu_screws) psu_face(cx) for (h = holes) translate(h) circle(d = psu_screw_d);
 }
 
-front_cut_top = closed_top ? psu_h - lip_top : panel_h + 10;
+front_cut_top = psu_h - lip_top;
 rear_cut_top = psu_screws ? min([for (h = rear_holes) h[1]]) - screw_pad_r
              : front_cut_top;
 
@@ -149,13 +158,12 @@ module front_panel() {
             rounded_rect(-panel_w / 2, 0, panel_w / 2, panel_h, corner_r);
             rack_holes();
             for (sx = [-1, 1])
-                bay_cutout(sx * bay_x, lip_side, lip_bottom, front_cut_top, front_holes, closed_top);
+                bay_cutout(sx * bay_x, lip_side, lip_bottom, front_cut_top, front_holes);
         }
         if (psu_screws)
-            for (sx = [-1, 1])
+            for (sx = [-1, 1], r = iec_relief)
                 translate([0, -iec_relief_t, 0]) xz_extrude(face_t) psu_face(sx * bay_x)
-                    translate([iec_relief[0], iec_relief[2]])
-                        square([iec_relief[1] - iec_relief[0], iec_relief[3] - iec_relief[2]]);
+                    translate([r[0], r[2]]) square([r[1] - r[0], r[3] - r[2]]);
     }
 }
 
@@ -203,7 +211,7 @@ module clamp_2d() {
     difference() {
         rounded_rect(-cw, 0, cw, wall_h, corner_r);
         for (sx = [-1, 1])
-            bay_cutout(sx * bay_x, rear_lip_side, rear_lip_bottom, rear_cut_top, rear_holes, true);
+            bay_cutout(sx * bay_x, rear_lip_side, rear_lip_bottom, rear_cut_top, rear_holes);
         for (x = [-post_x, 0, post_x], z = post_z) translate([x, z]) circle(d = screw_d);
     }
 }
