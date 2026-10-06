@@ -1,0 +1,72 @@
+name: Release STLs
+
+# Manually triggered: builds every package in the flake and publishes the
+# resulting STL files as assets on a new GitHub release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (default: release-YYYYMMDD-<short sha>)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Build all packages
+        run: |
+          set -euo pipefail
+          system=$(nix eval --impure --raw --expr builtins.currentSystem)
+          mkdir -p dist
+          for pkg in $(nix eval ".#packages.$system" --apply builtins.attrNames --json | jq -r '.[]'); do
+            echo "::group::$pkg"
+            out=$(nix build ".#packages.$system.$pkg" --no-link --print-out-paths -L)
+            found=0
+            while IFS= read -r -d '' stl; do
+              name=$(basename "$stl")
+              if [ -e "dist/$name" ]; then
+                echo "::error::duplicate STL name $name (from $pkg)"
+                exit 1
+              fi
+              cp "$stl" "dist/$name"
+              found=1
+            done < <(find -L "$out" -name '*.stl' -print0)
+            if [ "$found" = 0 ]; then
+              echo "::warning::$pkg produced no STL files"
+            fi
+            echo "::endgroup::"
+          done
+          ls -la dist
+          if [ -z "$(ls -A dist)" ]; then
+            echo "::error::no STL files were built"
+            exit 1
+          fi
+          (cd dist && zip -q ../all-stls.zip ./*.stl)
+          mv all-stls.zip dist/
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_INPUT: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          tag="${TAG_INPUT:-release-$(date -u +%Y%m%d)-${GITHUB_SHA::7}}"
+          args=(--target "$GITHUB_SHA" --title "$tag" --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$tag" "${args[@]}" dist/*
