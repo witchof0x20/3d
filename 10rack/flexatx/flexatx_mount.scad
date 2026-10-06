@@ -1,20 +1,17 @@
-// 10" rack mount for two Flex ATX power supplies, side by side.
+// 10" rack mount for two Flex ATX power supplies, side by side, using the
+// 1U bracket that ships with many Flex ATX PSUs (a flat plate over the IEC
+// end with a mounting ear on each side).
 //
 // Coordinates: x across the rack (centered), y front-to-back (y = 0 is the
 // back face of the front panel, the panel occupies -face_t..0), z up
 // (z = 0 is the bottom of the panel/floor).
 //
-// The PSUs slide in from the rear, IEC end first, and bottom out against
-// lips around the front cutouts. A bolt-on rear clamp plate (M3 screws into
-// heat-set inserts in the wall posts) pins them forward. The front lips go
-// all the way round the cutout (the top bar sits in front of the PSU face, so
-// it fits even in 1U).
-//
-// With psu_screws on, the PSUs are also bolted through the front panel (4x)
-// and the rear plate (2x) using the 6-32 holes from Intel's Flex ATX
-// drawing. That drawing's IEC face has three holes along one long edge; this
-// mount assumes that edge is at the bottom, which puts the IEC inlet on the
-// right (seen from the front) and the DC-end holes 7 mm below the top.
+// Each PSU drops in from the top: its bracket slides down a slot between the
+// front panel and the bay walls. M3 screws go through the front panel and
+// the bracket ears into M3 nuts pressed into hex pockets in the wall ends;
+// the pockets open toward the bracket, so the nut clamps straight onto it.
+// A rear plate bolts onto the back of the walls the same way and into the
+// PSU's two 6-32 holes on the DC end, per Intel's Flex ATX drawing.
 //
 // Print the body standing on its floor; print the clamp flat.
 
@@ -35,41 +32,41 @@ psu_w = 81.5;
 psu_h = 40.5;
 psu_l = 150;
 psu_clr = 0.5;              // per side across the width
-psu_len_clr = 0.3;          // total along the length; keep small, both ends are bolted
+psu_len_clr = 0.3;          // between the PSU's DC end and the rear plate
 
-/* [PSU screws] */
-psu_screws = true;
-// [u, v] in mm on the PSU face: u from the IEC-side edge, v up from the bottom.
-front_holes = [[4.4, 4.6], [15.2, 3.5], [76.0, 4.1], [76.0, 36.1]];
-rear_holes = [[15.0, 33.5], [66.5, 33.5]];
-psu_screw_d = 3.8;          // #6-32 clearance
-screw_pad_r = 4.5;
-// Front pockets so a C13 plug body can seat and the two screws beside the
-// inlet sit flush. Each is [u0, u1, v0, v1].
-iec_relief = [[3, 30, 0, 45], [0, 20, 0, 9]];
-iec_relief_t = 2;           // panel left behind the pocket
+/* [Bracket - measure yours] */
+bracket_w = 100;
+bracket_h = 40;
+bracket_t = 1.2;
+bracket_clr = 0.4;          // extra slot thickness
+bracket_z = 0;              // bracket bottom relative to the PSU bottom
+// [x from the PSU centerline, z up from the bracket bottom]
+bracket_holes = [[-45, 20], [45, 20]];
+bracket_gap = 2;            // between the two brackets
 
 /* [Structure] */
 floor_t = 3;
-outer_wall_t = 6;
-center_wall_t = 8;
-lip_side = 3;               // how far the front lips cover the PSU face
-lip_bottom = 2;
-lip_top = 3;
+wall_t = 9;
+window_side = 0;            // how far the panel overlaps the PSU face at the sides
+window_bottom = 1;
+top_bar = 2.5;              // panel material above the window
 rear_lip_side = 4;
 rear_lip_bottom = 6;
-gusset_x = 14;
+gusset_x = 9;
 gusset_y = 24;
-post_w = 10;                // outer rear posts, measured from the wall's inner face
-post_l = 12;
 corner_r = 2;
 vents = true;
 
 /* [Fasteners] */
-insert_d = 4.2;             // M3 heat-set insert hole
-insert_depth = 7;
+nut_af = 5.7;               // M3 nut across flats, plus press-fit slack
+nut_t = 2.6;                // pocket depth
 screw_d = 3.4;
+screw_tip_depth = 8;        // clearance for the screw beyond the nut
 clamp_t = 5;
+// PSU DC-end holes: [u from the IEC-side edge, v up from the PSU bottom]
+rear_holes = [[15.0, 33.5], [66.5, 33.5]];
+psu_screw_d = 3.8;          // #6-32 clearance
+screw_pad_r = 4.5;
 
 /* [Hidden] */
 $fn = 48;
@@ -78,21 +75,27 @@ U = 44.45;
 
 panel_h = units * U - u_clear;
 wall_h = panel_h;
-bay_w = psu_w + 2 * psu_clr;
-bay_l = psu_l + psu_len_clr;
-body_w = 2 * bay_w + 2 * outer_wall_t + center_wall_t;
-bay_x = center_wall_t / 2 + bay_w / 2;
-post_x = body_w / 2 - outer_wall_t + post_w / 2;
-post_z = [floor_t + 7, wall_h - 7];
+slot = bracket_t + bracket_clr;
+bay_x = bracket_w / 2 + bracket_gap / 2;
+wall_in = psu_w / 2 + psu_clr;          // bay center to wall inner face
+body_half = bay_x + wall_in + wall_t;
+center_half = bay_x - wall_in;          // the center block between the bays
+y_end = bracket_t + psu_l + psu_len_clr;
 psu_top = floor_t + psu_h;
-// Only close the cutout over the PSU if the bar above it is worth having.
+rear_z = [floor_t + 7, wall_h - 7];
+rear_x = [-(body_half - wall_t / 2), 0, body_half - wall_t / 2];
 
 rail_inner = rail_hole_pitch / 2 - 8;
-assert(body_w / 2 + gusset_x <= rail_inner, "body/gussets would hit the rack rails");
-assert(body_w / 2 - outer_wall_t + post_w <= rail_inner, "rear posts would hit the rack rails");
+assert(body_half + gusset_x <= rail_inner, "body/gussets would hit the rack rails");
+assert(bay_x + bracket_w / 2 <= rail_inner, "brackets would hit the rack rails");
 assert(panel_w > rail_hole_pitch + rack_hole_d + rack_hole_slot + 4, "ears too narrow for the rail holes");
 assert(psu_top <= units * U - u_clear / 2, "PSU sticks out of the rack unit; reduce floor_t");
-assert(panel_h - psu_top + lip_top >= 2.5, "front top bar too thin");
+assert(bracket_z >= 0, "bracket hangs below the PSU; the floor would need a notch");
+assert(floor_t + bracket_z + bracket_h <= panel_h, "bracket taller than the panel");
+assert(center_half >= 0, "brackets narrower than the PSU? check bracket_w");
+for (h = bracket_holes)
+    assert(abs(h[0]) - wall_in >= nut_af / 2 + 0.5 && abs(h[0]) <= wall_in + wall_t - nut_af / 2 - 0.5,
+           str("bracket hole at x=", h[0], " does not land in a wall; adjust wall_t or psu_clr"));
 
 // Extrude a 2D shape drawn in (x, z) so it occupies y in [-t, 0].
 module xz_extrude(t) {
@@ -104,47 +107,23 @@ module rounded_rect(x0, z0, x1, z1, r) {
 }
 
 // Map PSU-face coordinates (u from the IEC side, v up from the PSU bottom)
-// into the (x, z) plane for the bay centered at cx.
+// into the (x, z) plane for the bay centered at cx. The IEC end is on the
+// right, seen from the front.
 module psu_face(cx) {
     translate([cx + psu_w / 2, floor_t]) mirror([1, 0]) children();
 }
 
-// Solid tab around a PSU screw hole, run out to the nearest edge that has
-// panel material to hang it from.
-module screw_pad(h) {
-    u = h[0];
-    v = h[1];
-    hull() {
-        translate([u, v]) circle(r = screw_pad_r);
-        if (v <= 10)
-            translate([u - screw_pad_r, -1]) square([2 * screw_pad_r, 1]);
-        else if (v >= psu_h - 10)
-            translate([u - screw_pad_r, psu_h]) square([2 * screw_pad_r, 1]);
-        else
-            translate([u < psu_w / 2 ? -1 : psu_w, v - screw_pad_r]) square([1, 2 * screw_pad_r]);
+function bracket_hole_xz(sx, h) = [sx * bay_x + h[0], floor_t + bracket_z + h[1]];
+
+// Hex nut pocket plus screw clearance, opening at the origin and running
+// into the part along +z. Flats face +-x so the pocket fits thin walls and
+// a corner points up, which prints cleanly sideways.
+module nut_pocket() {
+    translate([0, 0, -eps]) {
+        rotate([0, 0, 90]) cylinder(d = nut_af / cos(30), h = nut_t + eps, $fn = 6);
+        cylinder(d = screw_d, h = nut_t + screw_tip_depth);
     }
 }
-
-// Opening in a plate in front of / behind a bay, leaving lips around the PSU
-// face plus pads for any PSU screws.
-module bay_cutout(cx, side, bottom, top, holes) {
-    psu_face(cx) difference() {
-        rounded_rect(side, bottom, psu_w - side, top, corner_r);
-        if (psu_screws) {
-            for (h = holes) screw_pad(h);
-            // merge neighbouring pads on the same edge so there is no notch between them
-            for (i = [0 : len(holes) - 2], j = [i + 1 : len(holes) - 1])
-                if (abs(holes[i][0] - holes[j][0]) < 4 * screw_pad_r
-                    && abs(holes[i][1] - holes[j][1]) < screw_pad_r)
-                    hull() { screw_pad(holes[i]); screw_pad(holes[j]); }
-        }
-    }
-    if (psu_screws) psu_face(cx) for (h = holes) translate(h) circle(d = psu_screw_d);
-}
-
-front_cut_top = psu_h - lip_top;
-rear_cut_top = psu_screws ? min([for (h = rear_holes) h[1]]) - screw_pad_r
-             : front_cut_top;
 
 module rack_holes() {
     for (sx = [-1, 1], u = [0 : units - 1], hz = [6.35, 38.1])
@@ -153,17 +132,14 @@ module rack_holes() {
 }
 
 module front_panel() {
-    difference() {
-        xz_extrude(face_t) difference() {
-            rounded_rect(-panel_w / 2, 0, panel_w / 2, panel_h, corner_r);
-            rack_holes();
-            for (sx = [-1, 1])
-                bay_cutout(sx * bay_x, lip_side, lip_bottom, front_cut_top, front_holes);
+    xz_extrude(face_t) difference() {
+        rounded_rect(-panel_w / 2, 0, panel_w / 2, panel_h, corner_r);
+        rack_holes();
+        for (sx = [-1, 1]) {
+            hw = psu_w / 2 - window_side;
+            rounded_rect(sx * bay_x - hw, floor_t + window_bottom, sx * bay_x + hw, panel_h - top_bar, corner_r);
+            for (h = bracket_holes) translate(bracket_hole_xz(sx, h)) circle(d = screw_d);
         }
-        if (psu_screws)
-            for (sx = [-1, 1], r = iec_relief)
-                translate([0, -iec_relief_t, 0]) xz_extrude(face_t) psu_face(sx * bay_x)
-                    translate([r[0], r[2]]) square([r[1] - r[0], r[3] - r[2]]);
     }
 }
 
@@ -171,59 +147,68 @@ module floor_vents() {
     slot_w = 4;
     pitch = 10;
     margin = 20;
-    n = floor((bay_l - 2 * margin) / pitch);
+    n = floor((y_end - 2 * margin) / pitch);
     for (sx = [-1, 1], i = [0 : n])
         translate([sx * bay_x, margin + i * pitch, -eps])
             hull() for (dx = [-1, 1])
-                translate([dx * (bay_w / 2 - 12), 0, 0]) cylinder(d = slot_w, h = floor_t + 2 * eps);
+                translate([dx * (wall_in - 12), 0, 0]) cylinder(d = slot_w, h = floor_t + 2 * eps);
 }
 
 module body() {
     difference() {
         union() {
             front_panel();
-            // floor
-            translate([-body_w / 2, -eps, 0]) cube([body_w, bay_l + eps, floor_t]);
-            // outer + center walls
+            translate([-body_half, -eps, 0]) cube([2 * body_half, y_end + eps, floor_t]);
+            // outer walls and the center block
             for (sx = [-1, 1])
-                translate([sx * (body_w / 2 - outer_wall_t / 2) - outer_wall_t / 2, -eps, 0])
-                    cube([outer_wall_t, bay_l + eps, wall_h]);
-            translate([-center_wall_t / 2, -eps, 0]) cube([center_wall_t, bay_l + eps, wall_h]);
-            // rear posts on the outside of the outer walls
-            for (sx = [-1, 1])
-                translate([sx * (body_w / 2 - outer_wall_t) + (sx < 0 ? -post_w : 0), bay_l - post_l, 0])
-                    cube([post_w, post_l, wall_h]);
+                translate([sx > 0 ? body_half - wall_t : -body_half, -eps, 0])
+                    cube([wall_t, y_end + eps, wall_h]);
+            translate([-center_half, -eps, 0]) cube([2 * center_half, y_end + eps, wall_h]);
             // full-height triangular gussets tying the ears to the outer walls
             for (sx = [-1, 1])
                 mirror([sx < 0 ? 1 : 0, 0, 0])
                     linear_extrude(wall_h)
-                        polygon([[body_w / 2 - eps, -eps], [body_w / 2 + gusset_x, -eps], [body_w / 2 - eps, gusset_y]]);
+                        polygon([[body_half - eps, -eps], [body_half + gusset_x, -eps], [body_half - eps, gusset_y]]);
         }
+        // slot the brackets drop into
+        for (sx = [-1, 1])
+            translate([sx * bay_x - bracket_w / 2 - 0.5, 0, floor_t])
+                cube([bracket_w + 1, slot, wall_h]);
         if (vents) floor_vents();
-        // heat-set insert holes in the rear of each post / the center wall
-        for (x = [-post_x, 0, post_x], z = post_z)
-            translate([x, bay_l + eps, z]) rotate([90, 0, 0]) cylinder(d = insert_d, h = insert_depth);
+        // nuts for the bracket screws, in the front ends of the walls
+        for (sx = [-1, 1], h = bracket_holes)
+            let(p = bracket_hole_xz(sx, h))
+                translate([p[0], slot, p[1]]) rotate([-90, 0, 0]) nut_pocket();
+        // nuts for the rear plate
+        for (x = rear_x, z = rear_z)
+            translate([x, y_end, z]) rotate([90, 0, 0]) nut_pocket();
     }
 }
 
 module clamp_2d() {
-    cw = body_w / 2 - outer_wall_t + post_w;
+    cut_top = min([for (h = rear_holes) h[1]]) - screw_pad_r;
     difference() {
-        rounded_rect(-cw, 0, cw, wall_h, corner_r);
-        for (sx = [-1, 1])
-            bay_cutout(sx * bay_x, rear_lip_side, rear_lip_bottom, rear_cut_top, rear_holes);
-        for (x = [-post_x, 0, post_x], z = post_z) translate([x, z]) circle(d = screw_d);
+        rounded_rect(-body_half, 0, body_half, wall_h, corner_r);
+        for (sx = [-1, 1]) {
+            psu_face(sx * bay_x) {
+                rounded_rect(rear_lip_side, rear_lip_bottom, psu_w - rear_lip_side, cut_top, corner_r);
+                for (h = rear_holes) translate(h) circle(d = psu_screw_d);
+            }
+        }
+        for (x = rear_x, z = rear_z) translate([x, z]) circle(d = screw_d);
     }
 }
 
 // Placed in its installed position behind the body.
 module clamp() {
-    translate([0, bay_l + clamp_t, 0]) xz_extrude(clamp_t) clamp_2d();
+    translate([0, y_end + clamp_t, 0]) xz_extrude(clamp_t) clamp_2d();
 }
 
 module psu_ghost() {
-    for (sx = [-1, 1])
-        %translate([sx * bay_x - psu_w / 2, 0, floor_t]) cube([psu_w, psu_l, psu_h]);
+    for (sx = [-1, 1]) {
+        %translate([sx * bay_x - psu_w / 2, bracket_t, floor_t]) cube([psu_w, psu_l, psu_h]);
+        %translate([sx * bay_x - bracket_w / 2, 0, floor_t + bracket_z]) cube([bracket_w, bracket_t, bracket_h]);
+    }
 }
 
 if (part == "body") {
