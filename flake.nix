@@ -13,6 +13,7 @@
       in
       {
         packages.flexatx = pkgs.callPackage ./10rack/flexatx { };
+        packages.hdd = pkgs.callPackage ./10rack/hdd { };
 
         devShell = pkgs.mkShell {
           packages = with pkgs; [ openscad ];
