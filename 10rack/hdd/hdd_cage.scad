@@ -321,7 +321,11 @@ module backplane() {
                 translate([0, 0, t ? H : 0]) mirror([0, 0, t ? 1 : 0]) {
                     box(fx[0], fx[1], foot_y[0], foot_y[1], plate_t + 0.2, plate_t + beam_h + 0.3 + eps);
                     box(wx[0], wx[1], foot_y[0], foot_y[1], plate_t + 0.2, plate_t + beam_h + 1);
-                    box(tongue_x[0], tongue_x[1], foot_y[0] + 0.5, foot_y[1], plate_t - tongue_d, plate_t + 0.2 + eps);
+                    // tongue, chamfered on its +x side so it prints lying on that side
+                    hull() {
+                        box(tongue_x[0], tongue_x[1], foot_y[0] + 0.5, foot_y[1], plate_t - 1, plate_t + 0.2 + eps);
+                        box(tongue_x[0], tongue_x[1] - (tongue_d - 1), foot_y[0] + 0.5, foot_y[1], plate_t - tongue_d, plate_t - 1);
+                    }
                 }
         }
         for (z = [plate_t + beam_h / 2, H - plate_t - beam_h / 2]) {
@@ -346,8 +350,11 @@ module fan_panel() {
             box(-cage_w / 2 + 0.3, cage_w / 2 - 0.3, py[0], py[1], plate_t + 0.3, H - plate_t - 0.3);
             for (t = [false, true])
                 translate([0, 0, t ? H : 0]) mirror([0, 0, t ? 1 : 0]) {
-                    for (i = fan_slots)
+                    // tongues, each standing on a tab so they print without support
+                    for (i = fan_slots) {
                         box(sc(i) - tongue_w / 2, sc(i) + tongue_w / 2, py[0] - fan_t, py[0] + eps, plate_t - tongue_d, plate_t + 4);
+                        box(sc(i) - tongue_w / 2 - 1, sc(i) + tongue_w / 2 + 1, py[0], py[1], 0.5, plate_t + 0.3 + eps);
+                    }
                     for (x = fan_x)
                         box(x - 6, x + 6, py[0], py[1], 0.5, plate_t + 0.3 + eps);
                 }
