@@ -143,7 +143,9 @@ drive_z1 = drive_z0 + drive_w;
 arm_top_z = drive_z1 + drive_clr;              // top arm's inner face
 
 ad_dx = drive_t - conn_from_pcb - adapter_t / 2;  // adapter's -x face, from the slot's -x edge
-bar_dx = ad_dx - bar_wall / 2;                    // bar's screw line, from the slot's -x edge
+bar_dx = drive_t / 2;                            // bar's screw line: the slot center, so the plate
+                                                 // does not depend on the adapter, and the turned-over
+                                                 // top plate uses the same holes
 conn_zc = conn_edge_up ? drive_z1 - conn_from_edge - conn_len / 2
                        : drive_z0 + conn_from_edge + conn_len / 2;
 det_y = drive_y0 + finger_len;                    // where the finger's bump comes to rest
@@ -163,6 +165,7 @@ assert(tongue_d + 0.3 <= groove_d, "tongue bottoms out in the groove");
 assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + csk_d / 2,
        "arm does not cover the tongue and the screw heads");
 assert((csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5, "countersink too deep for arm_t");
+assert(bar_dx + m3_head_d / 2 + 0.5 <= ad_dx, "adapter too thick: the bar's wall would cover its screw head");
 assert(conn_zc - adapter_len / 2 > plate_t + beam_h + 1 && conn_zc + adapter_len / 2 < H - plate_t - beam_h - 1,
        "adapter collides with a beam");
 assert(y_end - y_front <= 256 && panel_w <= 256, "plate does not fit a 256 mm bed");
@@ -219,8 +222,8 @@ module plate() {
         // rack holes; the top plate's are these turned over
         for (sx = [-1, 1], z = rack_hole_zs()) if (z < ear_h - rack_hole_d / 2 - 2)
             rack_hole_y(sx * rail_hole_pitch / 2, z, y_front - eps, eps);
-        // heat-sets for the backplane bars, at both the bottom and turned-over top positions
-        for (i = [0 : n - 1], x = [x0(i) + bar_dx, -(x0(i) + bar_dx)])
+        // heat-sets for the backplane bars
+        for (i = [0 : n - 1], x = [x0(i) + bar_dx])
             translate([x, beam_y1 + eps, plate_t + beam_h / 2]) rotate([90, 0, 0]) cylinder(d = heatset_d, h = heatset_l);
         // heat-sets for the fan panel in the rear end face
         for (x = fan_x)
