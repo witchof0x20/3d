@@ -21,18 +21,17 @@
 // hangs off the narrow joint between the ears and the plates, and the parts
 // are small enough to reprint for another rack.
 //
-// Caddies hold a drive by pegs in its side screw holes (SFF-8301): the
-// bottom arm is part of the handle, the top arm is a separate clip that
-// drops onto the drive and into a pocket in the handle. Once the caddy is in
-// the cage the clip's tongue sits in the top groove, so it cannot lift off.
-// A flexing finger in the bottom tongue clicks into a notch in the groove.
+// Caddies are a handle with an arm above and below the drive; four
+// countersunk 6-32 screws go through the arms into the drive's side holes
+// (SFF-8301). A flexing finger in the bottom tongue clicks into a notch in
+// the groove.
 //
 // Coordinates: x across the rack (centered), y front to back (y = 0 is the
 // front face of the front posts), z up (z = 0 is the bottom of the 3U slot).
 // Drives stand on edge with their PCB side facing +x.
 
 /* [Output] */
-part = "assembly"; // [assembly, plate, caddy, caddy_clip, backplane, fan_panel, brace_left, brace_right, test_ear]
+part = "assembly"; // [assembly, plate, caddy, backplane, fan_panel, brace_left, brace_right, test_ear]
 
 /* [Rack - measure yours] */
 opening_w = 212;            // clear width between the posts
@@ -78,19 +77,20 @@ ear_h = 58;                 // bottom plate ears cover U1 and the lowest hole of
 arm_t = 3;
 arm_x = [9, 24.5];          // arm span across the drive's thickness, from its -x face
 handle_d = 8;
-handle_lip = 2;
 beam_h = 9;
 beam_d = 8;
 cable_room = 35;            // behind the adapters, in front of the fans
 
 /* [Caddy] */
-peg_d = 2.7;                // 6-32 minor diameter is 2.64-2.90
-peg_h = 2.5;
+drive_clr = 0.4;            // between the arms, on top of the drive's height
+screw_d = 3.6;              // 6-32 clearance
+csk_d = 7.0;                // 6-32 flat head is 6.6 across
+csk_angle = 82;
+csk_recess = 0.3;           // head sits this far below the arm face
 finger_len = 18;
 finger_gap = 0.8;
 bump_h = 0.6;
 dimple_d = 0.5;
-clip_tab = [10, 4.2, 8];    // x, y, z of the tab that drops into the handle
 
 /* [Backplane bar] */
 bar_wall = 5;
@@ -140,6 +140,7 @@ y_end = ad_y0 + adapter_d + cable_room + fan_t;  // rear end of the plates
 
 drive_z0 = plate_t + arm_t;
 drive_z1 = drive_z0 + drive_w;
+arm_top_z = drive_z1 + drive_clr;              // top arm's inner face
 
 ad_dx = drive_t - conn_from_pcb - adapter_t / 2;  // adapter's -x face, from the slot's -x edge
 bar_dx = ad_dx - bar_wall / 2;                    // bar's screw line, from the slot's -x edge
@@ -157,10 +158,11 @@ fan_cx = [-(fan_size + fan_gap) / 2, (fan_size + fan_gap) / 2];
 socket_z = [plate_t / 2 - socket_h / 2, plate_t / 2 + socket_h / 2];
 
 assert(pitch >= drive_t + 0.2, str("drives do not fit: pitch ", pitch, " for ", drive_t, " mm drives; widen opening_w"));
-assert(drive_w + 2 * arm_t + 0.5 <= inner_h, "caddy taller than the gap between the plates; thin plate_t or arm_t");
+assert(drive_w + drive_clr + 2 * arm_t + 0.3 <= inner_h, "caddy taller than the gap between the plates; thin plate_t or arm_t");
 assert(tongue_d + 0.3 <= groove_d, "tongue bottoms out in the groove");
-assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + peg_d / 2,
-       "arm does not cover the tongue and the pegs");
+assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + csk_d / 2,
+       "arm does not cover the tongue and the screw heads");
+assert((csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5, "countersink too deep for arm_t");
 assert(conn_zc - adapter_len / 2 > plate_t + beam_h + 1 && conn_zc + adapter_len / 2 < H - plate_t - beam_h - 1,
        "adapter collides with a beam");
 assert(y_end - y_front <= 256 && panel_w <= 256, "plate does not fit a 256 mm bed");
@@ -239,42 +241,50 @@ module top() {
 // ---------------------------------------------------------------- caddy
 
 // Built for slot 0; x is relative to the slot's -x edge.
-peg_x = drive_t - side_hole_z;
-peg_ys = [for (s = side_holes) drive_y1 - s];
+screw_x = drive_t - side_hole_z;
+screw_ys = [for (s = side_holes) drive_y1 - s];
 tongue_x = [drive_t / 2 - tongue_w / 2, drive_t / 2 + tongue_w / 2];
 finger_y = [drive_y0 + 2, drive_y0 + 2 + finger_len];
-tab_x = [arm_x[0] + 1, arm_x[0] + 1 + clip_tab[0]];
-tab_y = [y_front + handle_lip + 0.35, y_front + handle_lip + 0.35 + clip_tab[1]];
 
-module peg(z, up) {
-    translate([peg_x, 0, z]) mirror([0, 0, up ? 0 : 1]) {
-        cylinder(d = peg_d, h = peg_h - 0.5);
-        translate([0, 0, peg_h - 0.5 - eps]) cylinder(d1 = peg_d, d2 = peg_d - 1, h = 0.5);
+// Countersunk 6-32 hole through an arm whose outer face is at z, pointing
+// into the arm along +z (`up`) or -z.
+module csk_hole(z, up) {
+    cone_h = (csk_d - screw_d) / 2 / tan(csk_angle / 2);
+    translate([screw_x, 0, z]) mirror([0, 0, up ? 0 : 1]) {
+        translate([0, 0, -eps]) cylinder(d = screw_d, h = arm_t + 2 * eps);
+        translate([0, 0, -1]) cylinder(d = csk_d, h = 1 + csk_recess);
+        translate([0, 0, csk_recess - eps]) cylinder(d1 = csk_d, d2 = screw_d, h = cone_h);
     }
 }
 
+// One piece: the handle and both arms. The drive slides in from the side
+// and four countersunk 6-32 screws go through the arms into its side holes;
+// the heads sit below the arm faces because the arms ride on the plates.
 module caddy() {
-    mid = (plate_t + drive_z1) / 2;
+    mid = (plate_t + arm_top_z + arm_t) / 2;
     difference() {
         union() {
-            // handle, plus the lip the clip butts against
-            box(0.3, drive_t - 0.3, y_front, drive_y0, plate_t, drive_z1);
-            box(0.3, drive_t - 0.3, y_front, y_front + handle_lip, plate_t, drive_z1 + arm_t);
-            // bottom arm and its tongue
-            box(arm_x[0], arm_x[1], drive_y0 - eps, drive_y1, plate_t, drive_z0);
-            hull() {
-                box(tongue_x[0], tongue_x[1], y_front + 1, drive_y1 - 1, plate_t - tongue_d, plate_t + eps);
-                box(tongue_x[0] + 0.5, tongue_x[1] - 0.5, y_front + 0.5, drive_y1 - 0.5, plate_t - tongue_d + 0.5, plate_t + eps);
-            }
-            for (y = peg_ys) translate([0, y, 0]) peg(drive_z0 - eps, true);
+            box(0.3, drive_t - 0.3, y_front, drive_y0, plate_t, arm_top_z + arm_t);
+            for (t = [false, true])
+                translate([0, 0, t ? arm_top_z + arm_t + plate_t : 0]) mirror([0, 0, t ? 1 : 0]) {
+                    box(arm_x[0], arm_x[1], drive_y0 - eps, drive_y1, plate_t, drive_z0);
+                    hull() {
+                        box(tongue_x[0], tongue_x[1], y_front + 1, drive_y1 - 1, plate_t - tongue_d, plate_t + eps);
+                        box(tongue_x[0] + 0.5, tongue_x[1] - 0.5, y_front + 0.5, drive_y1 - 0.5, plate_t - tongue_d + 0.5, plate_t + eps);
+                    }
+                }
             // detent bump on the finger's +x face
             translate([tongue_x[1] - eps, det_y, plate_t - tongue_d + 0.5])
                 linear_extrude(tongue_d - 1.1)
                     polygon([[0, -1.5], [bump_h, -0.5], [bump_h, 0.5], [0, 1.5]]);
         }
-        // free the finger (+x half of the tongue, rooted at the front): a slot
-        // down the middle of the tongue, a cut at its rear end, and a gap
-        // between it and the arm
+        for (y = screw_ys) translate([0, y, 0]) {
+            csk_hole(plate_t, true);
+            csk_hole(arm_top_z + arm_t, false);
+        }
+        // free the finger (+x half of the bottom tongue, rooted at the front):
+        // a slot down the middle of the tongue, a cut at its rear end, and a
+        // gap between it and the arm
         box(drive_t / 2 - finger_gap / 2, drive_t / 2 + finger_gap / 2, finger_y[0], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
         box(drive_t / 2 - finger_gap / 2, tongue_x[1] + 1, finger_y[1], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
         box(drive_t / 2 - finger_gap / 2, tongue_x[1] + 1, finger_y[0], finger_y[1] + finger_gap, plate_t - 0.6, plate_t + eps);
@@ -284,24 +294,6 @@ module caddy() {
         // vents
         for (z = [plate_t + 8 : 7 : mid - 16], z2 = [z, 2 * mid - z])
             box(4, drive_t - 4, y_front - eps, drive_y0 + eps, z2 - 1.5, z2 + 1.5);
-        // pocket for the clip's tab
-        box(tab_x[0], tab_x[1], tab_y[0], tab_y[1], drive_z1 - clip_tab[2], drive_z1 + eps);
-    }
-}
-
-module caddy_clip() {
-    union() {
-        box(arm_x[0], arm_x[1], y_front + handle_lip + 0.2, drive_y1, drive_z1, drive_z1 + arm_t);
-        hull() {
-            box(tongue_x[0], tongue_x[1], y_front + handle_lip + 1.2, drive_y1 - 1, drive_z1 + arm_t - eps, drive_z1 + arm_t + tongue_d);
-            box(tongue_x[0] + 0.5, tongue_x[1] - 0.5, y_front + handle_lip + 0.7, drive_y1 - 0.5, drive_z1 + arm_t - eps, drive_z1 + arm_t + tongue_d - 0.5);
-        }
-        for (y = peg_ys) translate([0, y, 0]) peg(drive_z1 + eps, false);
-        // tab, with a small bump that snaps it into the handle
-        box(tab_x[0] + 0.15, tab_x[1] - 0.15, tab_y[0] + 0.15, tab_y[1] - 0.15, drive_z1 - clip_tab[2] + 0.3, drive_z1 + eps);
-        translate([tab_x[1] - 0.15 - eps, (tab_y[0] + tab_y[1]) / 2, drive_z1 - clip_tab[2] / 2])
-            rotate([90, 0, 0]) linear_extrude(clip_tab[1] - 1, center = true)
-                polygon([[0, -1.5], [0.3, 0], [0, 1.5]]);
     }
 }
 
@@ -433,8 +425,6 @@ if (part == "plate") {
 } else if (part == "caddy") {
     // standing on the handle's front face
     translate([0, 0, -y_front]) rotate([90, 0, 0]) caddy();
-} else if (part == "caddy_clip") {
-    translate([0, 0, -(y_front + handle_lip + 0.2)]) rotate([90, 0, 0]) caddy_clip();
 } else if (part == "backplane") {
     // lying on the face the adapter mounts to
     translate([0, 0, ad_dx]) rotate([0, 90, 0]) backplane();
@@ -455,7 +445,6 @@ if (part == "plate") {
     color("steelblue") { plate(); top() plate(); }
     for (i = [0 : n - 1]) at_slot(i) {
         color("orange") caddy();
-        color("gold") caddy_clip();
         color("tomato") backplane();
     }
     for (i = [0 : n - 1]) drive_ghost(i);
