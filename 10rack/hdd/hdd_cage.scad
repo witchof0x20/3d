@@ -86,9 +86,13 @@ cable_room = 35;            // behind the adapters, in front of the fans
 /* [Caddy] */
 drive_clr = 0.4;            // between the arms, on top of the drive's height
 screw_d = 3.6;              // 6-32 clearance
+screw_head = "countersunk"; // [countersunk, pan]
 csk_d = 7.0;                // 6-32 flat head is 6.6 across
 csk_angle = 82;
+pan_head_d = 7.0;           // measure yours; counterbored 0.4 wider
+pan_head_h = 1.8;           // a standard 6-32 pan head (~2.3) is too tall for 3 mm arms; button/wafer heads fit
 csk_recess = 0.3;           // head sits this far below the arm face
+min_floor = 0.8;            // plastic left under a pan head
 finger_len = 18;
 finger_gap = 0.8;
 bump_h = 0.45;              // detent bump; interference with the groove wall is this minus 0.25
@@ -164,9 +168,13 @@ socket_z = [plate_t / 2 - socket_h / 2, plate_t / 2 + socket_h / 2];
 assert(pitch >= drive_t + 0.2, str("drives do not fit: pitch ", pitch, " for ", drive_t, " mm drives; widen opening_w"));
 assert(drive_w + drive_clr + 2 * arm_t + 0.3 <= inner_h, "caddy taller than the gap between the plates; thin plate_t or arm_t");
 assert(tongue_d + 0.3 <= groove_d, "tongue bottoms out in the groove");
-assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + csk_d / 2,
+assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + head_d / 2,
        "arm does not cover the tongue and the screw heads");
-assert((csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5, "countersink too deep for arm_t");
+assert(screw_head != "countersunk" || (csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5,
+       "countersink too deep for arm_t");
+assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
+       str("pan heads need arm_t >= ", pan_head_h + csk_recess + min_floor,
+           "; there is no height for thicker arms without thinner plates (plate_t), so use lower heads or countersunk screws"));
 assert(bar_dx + m3_head_d / 2 + 0.5 <= ad_dx, "adapter too thick: the bar's wall would cover its screw head");
 assert(conn_zc - adapter_len / 2 > plate_t + beam_h + 1 && conn_zc + adapter_len / 2 < H - plate_t - beam_h - 1,
        "adapter collides with a beam");
@@ -247,18 +255,24 @@ module top() {
 
 // Built for slot 0; x is relative to the slot's -x edge.
 screw_x = drive_t - side_hole_z;
+head_d = screw_head == "pan" ? pan_head_d + 0.4 : csk_d;
 screw_ys = [for (s = side_holes) drive_y1 - s];
 tongue_x = [drive_t / 2 - tongue_w / 2, drive_t / 2 + tongue_w / 2];
 finger_y = [drive_y0 + 2, drive_y0 + 2 + finger_len];
 
-// Countersunk 6-32 hole through an arm whose outer face is at z, pointing
-// into the arm along +z (`up`) or -z.
-module csk_hole(z, up) {
+// 6-32 hole through an arm whose outer face is at z, pointing into the arm
+// along +z (`up`) or -z: countersunk, or counterbored for a pan head. Either
+// way the head ends up below the arm face, since the arms ride on the plates.
+module screw_hole(z, up) {
     cone_h = (csk_d - screw_d) / 2 / tan(csk_angle / 2);
     translate([screw_x, 0, z]) mirror([0, 0, up ? 0 : 1]) {
         translate([0, 0, -eps]) cylinder(d = screw_d, h = arm_t + 2 * eps);
-        translate([0, 0, -1]) cylinder(d = csk_d, h = 1 + csk_recess);
-        translate([0, 0, csk_recess - eps]) cylinder(d1 = csk_d, d2 = screw_d, h = cone_h);
+        if (screw_head == "pan") {
+            translate([0, 0, -1]) cylinder(d = pan_head_d + 0.4, h = 1 + pan_head_h + csk_recess);
+        } else {
+            translate([0, 0, -1]) cylinder(d = csk_d, h = 1 + csk_recess);
+            translate([0, 0, csk_recess - eps]) cylinder(d1 = csk_d, d2 = screw_d, h = cone_h);
+        }
     }
 }
 
@@ -290,8 +304,8 @@ module caddy() {
                     polygon([[0, -1.5], [bump_h, -0.5], [bump_h, 0.5], [0, 1.5]]);
         }
         for (y = screw_ys) translate([0, y, 0]) {
-            csk_hole(plate_t, true);
-            csk_hole(arm_top_z + arm_t, false);
+            screw_hole(plate_t, true);
+            screw_hole(arm_top_z + arm_t, false);
         }
         // free the finger (+x half of the bottom tongue, rooted at the front):
         // a slot down the middle of the tongue, a cut at its rear end, and a
