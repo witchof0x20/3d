@@ -77,6 +77,8 @@ ear_h = 58;                 // bottom plate ears cover U1 and the lowest hole of
 arm_t = 3;
 arm_x = [9, 24.5];          // arm span across the drive's thickness, from its -x face
 handle_d = 8;
+handle_clr = 0.3;           // extra gap above and below the handle, on top of the arms'
+handle_chamfer = 0.8;       // around the handle's front face, for elephant's foot
 beam_h = 9;
 beam_d = 8;
 cable_room = 35;            // behind the adapters, in front of the fans
@@ -89,7 +91,7 @@ csk_angle = 82;
 csk_recess = 0.3;           // head sits this far below the arm face
 finger_len = 18;
 finger_gap = 0.8;
-bump_h = 0.6;
+bump_h = 0.45;              // detent bump; interference with the groove wall is this minus 0.25
 dimple_d = 0.5;
 
 /* [Backplane bar] */
@@ -267,12 +269,18 @@ module caddy() {
     mid = (plate_t + arm_top_z + arm_t) / 2;
     difference() {
         union() {
-            box(0.3, drive_t - 0.3, y_front, drive_y0, plate_t, arm_top_z + arm_t);
+            // handle, a little shorter than the arms and chamfered round the
+            // face it prints on, so a squished first layer cannot catch
+            hull() {
+                hz = [plate_t + handle_clr, arm_top_z + arm_t - handle_clr];
+                box(0.3 + handle_chamfer, drive_t - 0.3 - handle_chamfer, y_front, y_front + eps, hz[0] + handle_chamfer, hz[1] - handle_chamfer);
+                box(0.3, drive_t - 0.3, y_front + handle_chamfer, drive_y0, hz[0], hz[1]);
+            }
             for (t = [false, true])
                 translate([0, 0, t ? arm_top_z + arm_t + plate_t : 0]) mirror([0, 0, t ? 1 : 0]) {
                     box(arm_x[0], arm_x[1], drive_y0 - eps, drive_y1, plate_t, drive_z0);
                     hull() {
-                        box(tongue_x[0], tongue_x[1], y_front + 1, drive_y1 - 1, plate_t - tongue_d, plate_t + eps);
+                        box(tongue_x[0], tongue_x[1], y_front + 1, drive_y1 - 1, plate_t - tongue_d, plate_t + handle_clr + eps);
                         box(tongue_x[0] + 0.5, tongue_x[1] - 0.5, y_front + 0.5, drive_y1 - 0.5, plate_t - tongue_d + 0.5, plate_t + eps);
                     }
                 }
