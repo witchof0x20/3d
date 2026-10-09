@@ -59,11 +59,12 @@ conn_edge_up = true;        // datum-Y edge faces up with the PCB facing +x; fli
 
 /* [SATA adapter - guessed from a photo] */
 adapter_ear_pitch = 40;     // ear hole center-to-center (measured)
-adapter_len = 50;           // overall length including ears
+adapter_len = 47;           // overall length including ears (40 mm hole pitch plus the ear radius, estimated)
 adapter_t = 7;              // body thickness
 adapter_d = 20;             // mating direction, female face to male tip
 adapter_ear_y = 8;          // ear holes, from the female face
-adapter_travel = [-3, 4];   // how far the adapter can slide down / up from its nominal height
+adapter_dz = 4;             // measured: the adapter mates 4 mm above where the spec location puts it
+adapter_travel = [-1, 1];   // slot travel around that, just in case
 m3_nut_af = 5.5;            // M3 nut across flats
 m3_nut_t = 2.4;
 mate_gap = 0.3;             // drive's rear face to the adapter's female face
@@ -165,6 +166,7 @@ bar_dx = drive_t / 2;                            // bar's screw line: the slot c
                                                  // top plate uses the same holes
 conn_zc = conn_edge_up ? drive_z1 - conn_from_edge - conn_len / 2
                        : drive_z0 + conn_from_edge + conn_len / 2;
+ad_zc = conn_zc + adapter_dz;                    // adapter center as it actually mates
 
 function x0(i) = -cage_w / 2 + i * pitch;        // slot's -x edge (the drive's -x face)
 function sc(i) = x0(i) + drive_t / 2;            // slot center
@@ -197,10 +199,10 @@ assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
        str("pan heads need arm_t >= ", pan_head_h + csk_recess + min_floor,
            "; there is no height for thicker arms without thinner plates (plate_t), so use lower heads or countersunk screws"));
 assert(bar_dx + m3_head_d / 2 + 0.5 <= ad_dx, "adapter too thick: the bar's wall would cover its screw head");
-assert(conn_zc + adapter_travel[1] + adapter_len / 2 <= H - plate_t - beam_h - 0.3,
+assert(ad_zc + adapter_travel[1] + adapter_len / 2 <= H - plate_t - beam_h - 0.3,
        "adapter_travel up would push the adapter into the top beam");
 assert(bar_wall - m3_nut_t - 0.2 >= 2, "bar_wall too thin for the nut track");
-assert(conn_zc - adapter_len / 2 > plate_t + beam_h + 1 && conn_zc + adapter_len / 2 < H - plate_t - beam_h - 1,
+assert(ad_zc + adapter_travel[0] - adapter_len / 2 > plate_t + beam_h + 1,
        "adapter collides with a beam");
 assert(y_end - y_front <= 256 && panel_w <= 256, "plate does not fit a 256 mm bed");
 assert(2 * (fan_size / 2 + abs(fan_cx[0])) <= cage_w, "fans wider than the cage");
@@ -388,7 +390,7 @@ module backplane() {
             translate([bar_dx, foot_y[1] - 3, z]) rotate([-90, 0, 0]) cylinder(d = m3_head_d, h = foot_d);
         }
         for (dz = [-1, 1])
-            let(ez = conn_zc + dz * adapter_ear_pitch / 2, ey = ad_y0 + adapter_ear_y) {
+            let(ez = ad_zc + dz * adapter_ear_pitch / 2, ey = ad_y0 + adapter_ear_y) {
                 // slot the ear screw slides in, so the adapter can be lined up
                 // with a drive's connector before the screws are tightened
                 hull() for (t = adapter_travel)
@@ -472,7 +474,7 @@ module brace() {
 
 module drive_ghost(i) {
     %translate([x0(i), drive_y0, drive_z0]) cube([drive_t, drive_l, drive_w]);
-    %translate([x0(i) + ad_dx, ad_y0, conn_zc - adapter_len / 2 + 3]) cube([adapter_t, adapter_d, adapter_len - 6]);
+    %translate([x0(i) + ad_dx, ad_y0, ad_zc - adapter_len / 2 + 3]) cube([adapter_t, adapter_d, adapter_len - 6]);
 }
 
 module rack_ghost() {
