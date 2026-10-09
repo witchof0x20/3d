@@ -23,8 +23,9 @@
 //
 // Caddies are a handle with an arm above and below the drive; four
 // countersunk 6-32 screws go through the arms into the drive's side holes
-// (SFF-8301). A flexing finger in the bottom tongue clicks into a notch in
-// the groove.
+// (SFF-8301). The caddy prints lying on the side the drive's PCB faces, so
+// its layers run along the arms; the tongues are chamfered on that side to
+// print without support.
 //
 // Coordinates: x across the rack (centered), y front to back (y = 0 is the
 // front face of the front posts), z up (z = 0 is the bottom of the 3U slot).
@@ -77,10 +78,10 @@ side_clr = 0.3;             // plate edge to the post's inner edge
 ear_t = 5;
 ear_h = 58;                 // bottom plate ears cover U1 and the lowest hole of U2
 arm_t = 3;
-arm_x = [9, 24.5];          // arm span across the drive's thickness, from its -x face
+arm_x = [9, 25.8];          // arm span across the drive's thickness, from its -x face; the +x end is the print bed
 handle_d = 8;
 handle_clr = 0.3;           // extra gap above and below the handle, on top of the arms'
-handle_chamfer = 0.8;       // around the handle's front face, for elephant's foot
+handle_chamfer = 0.8;       // around the handle's front face, as a lead-in
 beam_h = 9;
 beam_d = 8;
 cable_room = 35;            // behind the adapters, in front of the fans
@@ -95,10 +96,6 @@ pan_head_d = 7.0;           // measure yours; counterbored 0.4 wider
 pan_head_h = 1.8;           // a standard 6-32 pan head (~2.3) is too tall for 3 mm arms; button/wafer heads fit
 csk_recess = 0.3;           // head sits this far below the arm face
 min_floor = 0.8;            // plastic left under a pan head
-finger_len = 18;
-finger_gap = 0.8;
-bump_h = 0.45;              // detent bump; interference with the groove wall is this minus 0.25
-dimple_d = 0.5;
 
 /* [Caddy handle mount] */
 handle_mount = true;        // two M3 heat-sets in each handle's front face for a pull or knobs
@@ -166,7 +163,6 @@ bar_dx = drive_t / 2;                            // bar's screw line: the slot c
                                                  // top plate uses the same holes
 conn_zc = conn_edge_up ? drive_z1 - conn_from_edge - conn_len / 2
                        : drive_z0 + conn_from_edge + conn_len / 2;
-det_y = drive_y0 + finger_len;                    // where the finger's bump comes to rest
 
 function x0(i) = -cage_w / 2 + i * pitch;        // slot's -x edge (the drive's -x face)
 function sc(i) = x0(i) + drive_t / 2;            // slot center
@@ -191,6 +187,8 @@ assert(!handle_mount || (mount_zs[0] - heatset_d / 2 > plate_t + handle_clr + ha
                          && mount_zs[0] + heatset_d / 2 < handle_mid - 17 - 2),
        "handle mount points run into the finger pocket or the handle's edge; change mount_spacing");
 assert(!handle_mount || heatset_l + 2 <= handle_d, "handle too shallow for the mount heat-sets");
+assert(arm_x[1] == drive_t - 0.3, "arm_x[1] must be flush with the handle's +x face, which the caddy prints on");
+assert(2 * tongue_half(beam_y0) - tongue_d - 0.5 >= 1.2, "chamfered tongue tip too thin; reduce tongue_d");
 assert(screw_head != "countersunk" || (csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5,
        "countersink too deep for arm_t");
 assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
@@ -244,11 +242,6 @@ module plate() {
             box(sc(i) - groove_w / 2, sc(i) + groove_w / 2, beam_y1,
                 len([for (s = fan_slots) if (s == i) s]) > 0 ? y_end + eps : foot_y[1] + 2,
                 plate_t - groove_d, plate_t + eps);
-            // notches for the caddy's detent finger (both walls, so the turned-over top plate has them too)
-            for (s = [-1, 1])
-                translate([sc(i) + s * groove_half(det_y), det_y, plate_t - groove_d])
-                    linear_extrude(groove_d + eps)
-                        polygon([[0, -1.5], [s * dimple_d, -0.5], [s * dimple_d, 0.5], [0, 1.5], [-s * eps, 0]]);
         }
         // rack holes; the top plate's are these turned over
         for (sx = [-1, 1], z = rack_hole_zs()) if (z < ear_h - rack_hole_d / 2 - 2)
@@ -280,8 +273,6 @@ head_d = screw_head == "pan" ? pan_head_d + 0.4 : csk_d;
 screw_ys = [for (s = side_holes) drive_y1 - s];
 tongue_x = [drive_t / 2 - tongue_w / 2, drive_t / 2 + tongue_w / 2];  // straight tongues (backplane bar)
 function tongue_half(y) = groove_half(y) - tongue_clr;               // the caddy's tapered tongue
-tongue_xmax = drive_t / 2 + tongue_half(y_front) + 1;
-finger_y = [drive_y0 + 2, drive_y0 + 2 + finger_len];
 
 // 6-32 hole through an arm whose outer face is at z, pointing into the arm
 // along +z (`up`) or -z: countersunk, or counterbored for a pan head. Either
@@ -306,8 +297,8 @@ module caddy() {
     mid = handle_mid;
     difference() {
         union() {
-            // handle, a little shorter than the arms and chamfered round the
-            // face it prints on, so a squished first layer cannot catch
+            // handle, a little shorter than the arms and chamfered round its
+            // front face so it eases in between the plates
             hull() {
                 hz = [plate_t + handle_clr, arm_top_z + arm_t - handle_clr];
                 box(0.3 + handle_chamfer, drive_t - 0.3 - handle_chamfer, y_front, y_front + eps, hz[0] + handle_chamfer, hz[1] - handle_chamfer);
@@ -316,28 +307,19 @@ module caddy() {
             for (t = [false, true])
                 translate([0, 0, t ? arm_top_z + arm_t + plate_t : 0]) mirror([0, 0, t ? 1 : 0]) {
                     box(arm_x[0], arm_x[1], drive_y0 - eps, drive_y1, plate_t, drive_z0);
-                    // tapered tongue, chamfered along its bottom edges and nose
+                    // tapered tongue; its +x side (the print bed side) is chamfered
+                    // at 45 degrees so it is not a ledge with nothing under it
                     hull() for (y = [y_front + 0.5, drive_y1 - 0.5]) {
                         h = tongue_half(y);
-                        box(drive_t / 2 - h, drive_t / 2 + h, y, y + eps, plate_t - tongue_d + 0.5, plate_t + handle_clr + eps);
-                        box(drive_t / 2 - h + 0.5, drive_t / 2 + h - 0.5, y, y + eps, plate_t - tongue_d, plate_t + eps);
+                        box(drive_t / 2 - h, drive_t / 2 + h, y, y + eps, plate_t - eps, plate_t + handle_clr + eps);
+                        box(drive_t / 2 - h + 0.5, drive_t / 2 + h - tongue_d, y, y + eps, plate_t - tongue_d, plate_t - tongue_d + eps);
                     }
                 }
-            // detent bump on the finger's +x face
-            translate([drive_t / 2 + tongue_half(det_y) - eps, det_y, plate_t - tongue_d + 0.5])
-                linear_extrude(tongue_d - 1.1)
-                    polygon([[0, -1.5], [bump_h, -0.5], [bump_h, 0.5], [0, 1.5]]);
         }
         for (y = screw_ys) translate([0, y, 0]) {
             screw_hole(plate_t, true);
             screw_hole(arm_top_z + arm_t, false);
         }
-        // free the finger (+x half of the bottom tongue, rooted at the front):
-        // a slot down the middle of the tongue, a cut at its rear end, and a
-        // gap between it and the arm
-        box(drive_t / 2 - finger_gap / 2, drive_t / 2 + finger_gap / 2, finger_y[0], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
-        box(drive_t / 2 - finger_gap / 2, tongue_xmax, finger_y[1], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
-        box(drive_t / 2 - finger_gap / 2, tongue_xmax, finger_y[0], finger_y[1] + finger_gap, plate_t - 0.6, plate_t + eps);
         // finger pull: a pocket with an undercut to hook a fingertip into
         box(4, drive_t - 4, y_front - eps, y_front + 5, mid - 11, mid + 11);
         box(4, drive_t - 4, y_front + 2.5, y_front + 5, mid - 11, mid + 17);
@@ -502,8 +484,8 @@ if (part == "plate") {
     // standing on the bar's front face
     translate([0, 0, -(y_front - pull_reach - pull_bar_t)]) rotate([90, 0, 0]) pull();
 } else if (part == "caddy") {
-    // standing on the handle's front face
-    translate([0, 0, -y_front]) rotate([90, 0, 0]) caddy();
+    // lying on the side the drive's PCB faces
+    translate([0, 0, arm_x[1]]) rotate([0, 90, 0]) caddy();
 } else if (part == "backplane") {
     // lying on the face the adapter mounts to
     translate([0, 0, ad_dx]) rotate([0, 90, 0]) backplane();
