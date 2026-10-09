@@ -31,7 +31,7 @@
 // Drives stand on edge with their PCB side facing +x.
 
 /* [Output] */
-part = "assembly"; // [assembly, plate, caddy, backplane, fan_panel, brace_left, brace_right, test_ear]
+part = "assembly"; // [assembly, plate, caddy, pull, backplane, fan_panel, brace_left, brace_right, test_ear]
 
 /* [Rack - measure yours] */
 opening_w = 212;            // clear width between the posts
@@ -100,6 +100,14 @@ finger_gap = 0.8;
 bump_h = 0.45;              // detent bump; interference with the groove wall is this minus 0.25
 dimple_d = 0.5;
 
+/* [Caddy handle mount] */
+handle_mount = true;        // two M3 heat-sets in each handle's front face for a pull or knobs
+mount_spacing = 64;         // center-to-center; 64 mm is a standard cabinet-pull spacing
+pull_reach = 22;            // finger room between the pull's bar and the handle
+pull_bar_t = 8;             // pull bar thickness, front to back
+pull_w = 11;                // pull width; posts and bar
+pull_screw_l = 10;          // M3 screw length; the post's counterbore stops so it bites heatset_l - 0.5
+
 /* [Backplane bar] */
 bar_wall = 5;
 foot_d = 8;
@@ -149,6 +157,8 @@ y_end = ad_y0 + adapter_d + cable_room + fan_t;  // rear end of the plates
 drive_z0 = plate_t + arm_t;
 drive_z1 = drive_z0 + drive_w;
 arm_top_z = drive_z1 + drive_clr;              // top arm's inner face
+handle_mid = (plate_t + arm_top_z + arm_t) / 2;
+mount_zs = [handle_mid - mount_spacing / 2, handle_mid + mount_spacing / 2];
 
 ad_dx = drive_t - conn_from_pcb - adapter_t / 2;  // adapter's -x face, from the slot's -x edge
 bar_dx = drive_t / 2;                            // bar's screw line: the slot center, so the plate
@@ -177,6 +187,10 @@ assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole
        "arm does not cover the tongue and the screw heads");
 assert(arm_x[0] <= drive_t / 2 - tongue_half(y_front) && arm_x[1] >= drive_t / 2 + tongue_half(y_front),
        "arm narrower than the front of the caddy tongue");
+assert(!handle_mount || (mount_zs[0] - heatset_d / 2 > plate_t + handle_clr + handle_chamfer + 2
+                         && mount_zs[0] + heatset_d / 2 < handle_mid - 17 - 2),
+       "handle mount points run into the finger pocket or the handle's edge; change mount_spacing");
+assert(!handle_mount || heatset_l + 2 <= handle_d, "handle too shallow for the mount heat-sets");
 assert(screw_head != "countersunk" || (csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5,
        "countersink too deep for arm_t");
 assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
@@ -289,7 +303,7 @@ module screw_hole(z, up) {
 // and four countersunk 6-32 screws go through the arms into its side holes;
 // the heads sit below the arm faces because the arms ride on the plates.
 module caddy() {
-    mid = (plate_t + arm_top_z + arm_t) / 2;
+    mid = handle_mid;
     difference() {
         union() {
             // handle, a little shorter than the arms and chamfered round the
@@ -327,9 +341,35 @@ module caddy() {
         // finger pull: a pocket with an undercut to hook a fingertip into
         box(4, drive_t - 4, y_front - eps, y_front + 5, mid - 11, mid + 11);
         box(4, drive_t - 4, y_front + 2.5, y_front + 5, mid - 11, mid + 17);
-        // vents
+        // vents, skipping the ones the mount heat-sets would break into
         for (z = [plate_t + 8 : 7 : mid - 16], z2 = [z, 2 * mid - z])
-            box(4, drive_t - 4, y_front - eps, drive_y0 + eps, z2 - 1.5, z2 + 1.5);
+            if (!handle_mount || min([for (m = mount_zs) abs(z2 - m)]) > heatset_d / 2 + 1.5 + 2)
+                box(4, drive_t - 4, y_front - eps, drive_y0 + eps, z2 - 1.5, z2 + 1.5);
+        // heat-sets for a pull or knobs
+        if (handle_mount) for (z = mount_zs)
+            translate([drive_t / 2, y_front - eps, z]) rotate([-90, 0, 0]) cylinder(d = heatset_d, h = heatset_l + eps);
+    }
+}
+
+// D-shaped pull for a caddy, built in place in front of slot 0's handle. M3
+// screws drop through counterbores in the bar and posts into the handle's
+// heat-sets.
+module pull() {
+    assert(pull_screw_l - (heatset_l - 0.5) >= 3, "pull_screw_l too short to leave a post floor under the head");
+    bar_y = [y_front - pull_reach - pull_bar_t, y_front - pull_reach];
+    floor_t = pull_screw_l - (heatset_l - 0.5);   // post material the screw head bears on
+    difference() {
+        union() {
+            for (z = mount_zs)
+                translate([drive_t / 2, bar_y[1] - eps, z]) rotate([-90, 0, 0]) cylinder(d = pull_w, h = pull_reach + eps);
+            // bar, rounded at its ends
+            hull() for (z = mount_zs)
+                translate([drive_t / 2, bar_y[0], z]) rotate([-90, 0, 0]) cylinder(d = pull_w, h = pull_bar_t);
+        }
+        for (z = mount_zs) {
+            translate([drive_t / 2, bar_y[0] - eps, z]) rotate([-90, 0, 0]) cylinder(d = m3_clear, h = y_front - bar_y[0] + 2 * eps);
+            translate([drive_t / 2, bar_y[0] - eps, z]) rotate([-90, 0, 0]) cylinder(d = m3_head_d + 0.3, h = y_front - floor_t - bar_y[0] + eps);
+        }
     }
 }
 
@@ -458,6 +498,9 @@ module at_slot(i) {
 
 if (part == "plate") {
     plate();
+} else if (part == "pull") {
+    // standing on the bar's front face
+    translate([0, 0, -(y_front - pull_reach - pull_bar_t)]) rotate([90, 0, 0]) pull();
 } else if (part == "caddy") {
     // standing on the handle's front face
     translate([0, 0, -y_front]) rotate([90, 0, 0]) caddy();
@@ -481,6 +524,7 @@ if (part == "plate") {
     color("steelblue") { plate(); top() plate(); }
     for (i = [0 : n - 1]) at_slot(i) {
         color("orange") caddy();
+        if (handle_mount) color("dimgray") pull();
         color("tomato") backplane();
     }
     for (i = [0 : n - 1]) drive_ghost(i);

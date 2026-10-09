@@ -9,7 +9,7 @@ stdenvNoCC.mkDerivation {
 
   buildPhase = ''
     runHook preBuild
-    for part in plate caddy backplane fan_panel brace_left brace_right test_ear; do
+    for part in plate caddy pull backplane fan_panel brace_left brace_right test_ear; do
       openscad -o "hdd_$part.stl" -D "part=\"$part\"" hdd_cage.scad
     done
     runHook postBuild
