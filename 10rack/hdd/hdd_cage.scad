@@ -63,7 +63,9 @@ adapter_len = 50;           // overall length including ears
 adapter_t = 7;              // body thickness
 adapter_d = 20;             // mating direction, female face to male tip
 adapter_ear_y = 8;          // ear holes, from the female face
-adapter_screw_pilot = 2.5;  // M3 self-tapping into the bar; 4.0 for heat-sets
+adapter_travel = [-3, 4];   // how far the adapter can slide down / up from its nominal height
+m3_nut_af = 5.5;            // M3 nut across flats
+m3_nut_t = 2.4;
 mate_gap = 0.3;             // drive's rear face to the adapter's female face
 
 /* [Cage] */
@@ -195,6 +197,9 @@ assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
        str("pan heads need arm_t >= ", pan_head_h + csk_recess + min_floor,
            "; there is no height for thicker arms without thinner plates (plate_t), so use lower heads or countersunk screws"));
 assert(bar_dx + m3_head_d / 2 + 0.5 <= ad_dx, "adapter too thick: the bar's wall would cover its screw head");
+assert(conn_zc + adapter_travel[1] + adapter_len / 2 <= H - plate_t - beam_h - 0.3,
+       "adapter_travel up would push the adapter into the top beam");
+assert(bar_wall - m3_nut_t - 0.2 >= 2, "bar_wall too thin for the nut track");
 assert(conn_zc - adapter_len / 2 > plate_t + beam_h + 1 && conn_zc + adapter_len / 2 < H - plate_t - beam_h - 1,
        "adapter collides with a beam");
 assert(y_end - y_front <= 256 && panel_w <= 256, "plate does not fit a 256 mm bed");
@@ -383,8 +388,17 @@ module backplane() {
             translate([bar_dx, foot_y[1] - 3, z]) rotate([-90, 0, 0]) cylinder(d = m3_head_d, h = foot_d);
         }
         for (dz = [-1, 1])
-            translate([wx[0] - eps, ad_y0 + adapter_ear_y, conn_zc + dz * adapter_ear_pitch / 2])
-                rotate([0, 90, 0]) cylinder(d = adapter_screw_pilot, h = bar_wall + 2 * eps);
+            let(ez = conn_zc + dz * adapter_ear_pitch / 2, ey = ad_y0 + adapter_ear_y) {
+                // slot the ear screw slides in, so the adapter can be lined up
+                // with a drive's connector before the screws are tightened
+                hull() for (t = adapter_travel)
+                    translate([wx[0] - eps, ey, ez + t]) rotate([0, 90, 0]) cylinder(d = m3_clear, h = bar_wall + 2 * eps);
+                // hex track for the nut on the back face: it slides with the
+                // screw but cannot turn, so the screw tightens from the front
+                hull() for (t = adapter_travel)
+                    translate([wx[0] - eps, ey, ez + t]) rotate([0, 90, 0])
+                        cylinder(d = (m3_nut_af + 0.3) / cos(30), h = m3_nut_t + 0.2 + eps, $fn = 6);
+            }
     }
 }
 
