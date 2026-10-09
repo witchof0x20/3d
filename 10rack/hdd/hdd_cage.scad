@@ -68,6 +68,8 @@ mate_gap = 0.3;             // drive's rear face to the adapter's female face
 /* [Cage] */
 plate_t = 12;
 groove_w = 6.5;
+groove_taper = 2;           // the caddy grooves are this much wider at the front, narrowing to groove_w at the beam
+tongue_clr = 0.25;          // per side, between the caddy's (tapered) tongue and its groove
 groove_d = 4.5;
 tongue_w = 6;
 tongue_d = 4;
@@ -86,7 +88,7 @@ cable_room = 35;            // behind the adapters, in front of the fans
 /* [Caddy] */
 drive_clr = 0.4;            // between the arms, on top of the drive's height
 screw_d = 3.6;              // 6-32 clearance
-screw_head = "countersunk"; // [countersunk, pan]
+screw_head = "pan";         // [pan, countersunk]
 csk_d = 7.0;                // 6-32 flat head is 6.6 across
 csk_angle = 82;
 pan_head_d = 7.0;           // measure yours; counterbored 0.4 wider
@@ -159,6 +161,9 @@ det_y = drive_y0 + finger_len;                    // where the finger's bump com
 function x0(i) = -cage_w / 2 + i * pitch;        // slot's -x edge (the drive's -x face)
 function sc(i) = x0(i) + drive_t / 2;            // slot center
 function bnd(i) = sc(i) + pitch / 2;             // between slot i and i + 1
+// Half-width of a caddy groove at depth y: groove_taper wider at the front
+// face, narrowing linearly to groove_w at the beam.
+function groove_half(y) = groove_w / 2 + groove_taper / 2 * (beam_y0 - y) / (beam_y0 - y_front);
 function rack_hole_zs() = [for (u = [0 : units - 1], hz = hole_z) u * U + hz - u_clear / 2];
 
 fan_x = [bnd(0), bnd(6)];
@@ -170,6 +175,8 @@ assert(drive_w + drive_clr + 2 * arm_t + 0.3 <= inner_h, "caddy taller than the 
 assert(tongue_d + 0.3 <= groove_d, "tongue bottoms out in the groove");
 assert(arm_x[0] <= drive_t / 2 - tongue_w / 2 && arm_x[1] >= drive_t - side_hole_z + head_d / 2,
        "arm does not cover the tongue and the screw heads");
+assert(arm_x[0] <= drive_t / 2 - tongue_half(y_front) && arm_x[1] >= drive_t / 2 + tongue_half(y_front),
+       "arm narrower than the front of the caddy tongue");
 assert(screw_head != "countersunk" || (csk_d - screw_d) / 2 / tan(csk_angle / 2) + csk_recess < arm_t - 0.5,
        "countersink too deep for arm_t");
 assert(screw_head != "pan" || arm_t - pan_head_h - csk_recess >= min_floor,
@@ -214,18 +221,18 @@ module plate() {
             box(-cage_w / 2, cage_w / 2, beam_y0, beam_y1, plate_t - eps, plate_t + beam_h);
         }
         for (i = [0 : n - 1]) {
-            // caddy groove, with a lead-in at the front
-            hull() {
-                box(sc(i) - groove_w / 2, sc(i) + groove_w / 2, y_front + 1, beam_y0, plate_t - groove_d, plate_t + eps);
-                box(sc(i) - groove_w / 2 - 1, sc(i) + groove_w / 2 + 1, y_front - eps, y_front + eps, plate_t - groove_d, plate_t + eps);
-            }
+            // caddy groove, tapering from the front so the caddy goes in loose
+            // and centers itself as it seats
+            translate([sc(i), 0, plate_t - groove_d]) linear_extrude(groove_d + eps)
+                polygon([[-groove_half(y_front - eps), y_front - eps], [-groove_half(beam_y0), beam_y0],
+                         [groove_half(beam_y0), beam_y0], [groove_half(y_front - eps), y_front - eps]]);
             // backplane bar groove behind the beam; the fan panel's run to the end
             box(sc(i) - groove_w / 2, sc(i) + groove_w / 2, beam_y1,
                 len([for (s = fan_slots) if (s == i) s]) > 0 ? y_end + eps : foot_y[1] + 2,
                 plate_t - groove_d, plate_t + eps);
             // notches for the caddy's detent finger (both walls, so the turned-over top plate has them too)
             for (s = [-1, 1])
-                translate([sc(i) + s * groove_w / 2, det_y, plate_t - groove_d])
+                translate([sc(i) + s * groove_half(det_y), det_y, plate_t - groove_d])
                     linear_extrude(groove_d + eps)
                         polygon([[0, -1.5], [s * dimple_d, -0.5], [s * dimple_d, 0.5], [0, 1.5], [-s * eps, 0]]);
         }
@@ -257,7 +264,9 @@ module top() {
 screw_x = drive_t - side_hole_z;
 head_d = screw_head == "pan" ? pan_head_d + 0.4 : csk_d;
 screw_ys = [for (s = side_holes) drive_y1 - s];
-tongue_x = [drive_t / 2 - tongue_w / 2, drive_t / 2 + tongue_w / 2];
+tongue_x = [drive_t / 2 - tongue_w / 2, drive_t / 2 + tongue_w / 2];  // straight tongues (backplane bar)
+function tongue_half(y) = groove_half(y) - tongue_clr;               // the caddy's tapered tongue
+tongue_xmax = drive_t / 2 + tongue_half(y_front) + 1;
 finger_y = [drive_y0 + 2, drive_y0 + 2 + finger_len];
 
 // 6-32 hole through an arm whose outer face is at z, pointing into the arm
@@ -268,9 +277,9 @@ module screw_hole(z, up) {
     translate([screw_x, 0, z]) mirror([0, 0, up ? 0 : 1]) {
         translate([0, 0, -eps]) cylinder(d = screw_d, h = arm_t + 2 * eps);
         if (screw_head == "pan") {
-            translate([0, 0, -1]) cylinder(d = pan_head_d + 0.4, h = 1 + pan_head_h + csk_recess);
+            translate([0, 0, -eps]) cylinder(d = pan_head_d + 0.4, h = eps + pan_head_h + csk_recess);
         } else {
-            translate([0, 0, -1]) cylinder(d = csk_d, h = 1 + csk_recess);
+            translate([0, 0, -eps]) cylinder(d = csk_d, h = eps + csk_recess);
             translate([0, 0, csk_recess - eps]) cylinder(d1 = csk_d, d2 = screw_d, h = cone_h);
         }
     }
@@ -293,13 +302,15 @@ module caddy() {
             for (t = [false, true])
                 translate([0, 0, t ? arm_top_z + arm_t + plate_t : 0]) mirror([0, 0, t ? 1 : 0]) {
                     box(arm_x[0], arm_x[1], drive_y0 - eps, drive_y1, plate_t, drive_z0);
-                    hull() {
-                        box(tongue_x[0], tongue_x[1], y_front + 1, drive_y1 - 1, plate_t - tongue_d, plate_t + handle_clr + eps);
-                        box(tongue_x[0] + 0.5, tongue_x[1] - 0.5, y_front + 0.5, drive_y1 - 0.5, plate_t - tongue_d + 0.5, plate_t + eps);
+                    // tapered tongue, chamfered along its bottom edges and nose
+                    hull() for (y = [y_front + 0.5, drive_y1 - 0.5]) {
+                        h = tongue_half(y);
+                        box(drive_t / 2 - h, drive_t / 2 + h, y, y + eps, plate_t - tongue_d + 0.5, plate_t + handle_clr + eps);
+                        box(drive_t / 2 - h + 0.5, drive_t / 2 + h - 0.5, y, y + eps, plate_t - tongue_d, plate_t + eps);
                     }
                 }
             // detent bump on the finger's +x face
-            translate([tongue_x[1] - eps, det_y, plate_t - tongue_d + 0.5])
+            translate([drive_t / 2 + tongue_half(det_y) - eps, det_y, plate_t - tongue_d + 0.5])
                 linear_extrude(tongue_d - 1.1)
                     polygon([[0, -1.5], [bump_h, -0.5], [bump_h, 0.5], [0, 1.5]]);
         }
@@ -311,8 +322,8 @@ module caddy() {
         // a slot down the middle of the tongue, a cut at its rear end, and a
         // gap between it and the arm
         box(drive_t / 2 - finger_gap / 2, drive_t / 2 + finger_gap / 2, finger_y[0], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
-        box(drive_t / 2 - finger_gap / 2, tongue_x[1] + 1, finger_y[1], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
-        box(drive_t / 2 - finger_gap / 2, tongue_x[1] + 1, finger_y[0], finger_y[1] + finger_gap, plate_t - 0.6, plate_t + eps);
+        box(drive_t / 2 - finger_gap / 2, tongue_xmax, finger_y[1], finger_y[1] + finger_gap, plate_t - tongue_d - 1, plate_t);
+        box(drive_t / 2 - finger_gap / 2, tongue_xmax, finger_y[0], finger_y[1] + finger_gap, plate_t - 0.6, plate_t + eps);
         // finger pull: a pocket with an undercut to hook a fingertip into
         box(4, drive_t - 4, y_front - eps, y_front + 5, mid - 11, mid + 11);
         box(4, drive_t - 4, y_front + 2.5, y_front + 5, mid - 11, mid + 17);
